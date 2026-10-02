@@ -74,8 +74,8 @@ class StoreProvider extends ChangeNotifier {
 
   List<RiceProduct> _seedProducts() => const [
     RiceProduct(id: '1', name: 'Regular Milled Rice', category: 'Regular', pricePerKg: 48, costPerKg: 42, stockKg: 300, lowStockKg: 50),
-    RiceProduct(id: '2', name: 'Dinorado', category: 'Premium', pricePerKg: 58, costPerKg: 50, stockKg: 180, lowStockKg: 40),
-    RiceProduct(id: '3', name: 'Jasmine Rice', category: 'Premium', pricePerKg: 65, costPerKg: 56, stockKg: 120, lowStockKg: 30),
+    RiceProduct(id: '2', name: 'Dinorado', category: 'Premium', pricePerKg: 58, costPerKg: 50, stockKg: 180, lowStockKg: 40, sackKg: 25),
+    RiceProduct(id: '3', name: 'Jasmine Rice', category: 'Premium', pricePerKg: 65, costPerKg: 56, stockKg: 120, lowStockKg: 30, sackKg: 10),
     RiceProduct(id: '4', name: 'Sinandomeng', category: 'Regular', pricePerKg: 55, costPerKg: 47, stockKg: 90, lowStockKg: 25),
     RiceProduct(id: '5', name: 'Well Milled Rice', category: 'Regular', pricePerKg: 52, costPerKg: 45, stockKg: 240, lowStockKg: 50),
     RiceProduct(id: '6', name: 'Brown Rice', category: 'Healthy', pricePerKg: 72, costPerKg: 62, stockKg: 70, lowStockKg: 20),

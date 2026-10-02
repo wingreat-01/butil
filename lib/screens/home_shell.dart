@@ -119,6 +119,11 @@ class _RiceCard extends StatelessWidget {
   final RiceProduct product;
   const _RiceCard({required this.product});
 
+  String _formatPackageCount(double value) {
+    if (value == value.roundToDouble()) return value.toStringAsFixed(0);
+    return value.toStringAsFixed(1);
+  }
+
   @override
   Widget build(BuildContext context) {
     final store = context.read<StoreProvider>();
@@ -145,8 +150,13 @@ class _RiceCard extends StatelessWidget {
               Text(product.name, maxLines: 2, overflow: TextOverflow.ellipsis,
                 style: const TextStyle(fontWeight: FontWeight.w800)),
               Text('₱${product.pricePerKg.toStringAsFixed(2)} / kg'),
-              Text('${product.stockKg.toStringAsFixed(0)} kg in stock',
+              Text('${product.stockKg.toStringAsFixed(1)} kg in stock',
                 style: TextStyle(color: product.lowStock ? Colors.red : Colors.grey[700], fontSize: 12)),
+              const SizedBox(height: 2),
+              Text('10kg: ${_formatPackageCount(product.packagesFor(10))} • '
+                   '25kg: ${_formatPackageCount(product.packagesFor(25))} • '
+                   '50kg: ${_formatPackageCount(product.packagesFor(50))}',
+                style: TextStyle(color: Colors.grey[600], fontSize: 10)),
               if (product.lowStock)
                 const Text('LOW STOCK', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 11)),
             ],
@@ -159,11 +169,16 @@ class _RiceCard extends StatelessWidget {
   void _showQuantity(BuildContext context, RiceProduct product) {
     final controller = TextEditingController(text: '1');
     String unit = 'kg';
+    double packageKg = product.sackKg;
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       builder: (ctx) => StatefulBuilder(builder: (ctx, setModal) {
         final qty = double.tryParse(controller.text) ?? 0;
+        final kg = unit == 'kg' ? qty : qty * packageKg;
+        final total = kg * product.pricePerKg;
+
         return Padding(
           padding: EdgeInsets.only(
             left: 20, right: 20, top: 20,
@@ -173,41 +188,65 @@ class _RiceCard extends StatelessWidget {
             Text(product.name, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
             const SizedBox(height: 4),
             Text('₱${product.pricePerKg.toStringAsFixed(2)} per kg'),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
             SegmentedButton<String>(
               segments: const [
-                ButtonSegment(value: 'kg', label: Text('Kilogram')),
-                ButtonSegment(value: 'sack', label: Text('50 kg Sack')),
+                ButtonSegment(value: 'kg', label: Text('By KG'), icon: Icon(Icons.scale)),
+                ButtonSegment(value: 'package', label: Text('By Pack'), icon: Icon(Icons.inventory_2_outlined)),
               ],
               selected: {unit},
-              onSelectionChanged: (v) {
-                setModal(() {
-                  unit = v.first;
-                  controller.text = unit == 'sack' ? '1' : '1';
-                });
-              },
+              onSelectionChanged: (v) => setModal(() {
+                unit = v.first;
+                controller.text = '1';
+              }),
             ),
             const SizedBox(height: 12),
+            if (unit == 'package')
+              SizedBox(
+                width: double.infinity,
+                child: SegmentedButton<double>(
+                  segments: const [
+                    ButtonSegment(value: 10, label: Text('10 kg')),
+                    ButtonSegment(value: 25, label: Text('25 kg')),
+                    ButtonSegment(value: 50, label: Text('50 kg')),
+                  ],
+                  selected: {packageKg},
+                  onSelectionChanged: (v) => setModal(() {
+                    packageKg = v.first;
+                    controller.text = '1';
+                  }),
+                ),
+              ),
+            if (unit == 'package') const SizedBox(height: 10),
             TextField(
               controller: controller,
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
               onChanged: (_) => setModal(() {}),
               decoration: InputDecoration(
-                labelText: unit == 'kg' ? 'Quantity (kg)' : 'Number of sacks',
+                labelText: unit == 'kg'
+                    ? 'Quantity (kg)'
+                    : 'Number of ${packageKg.toStringAsFixed(0)} kg packs',
                 prefixIcon: const Icon(Icons.scale),
               ),
             ),
-            const SizedBox(height: 12),
-            Text(
-              'Total: ₱${((unit == 'sack' ? qty * product.sackKg : qty) * product.pricePerKg).toStringAsFixed(2)}',
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                unit == 'kg'
+                    ? '${qty.toStringAsFixed(1)} kg'
+                    : '${qty.toStringAsFixed(qty == qty.roundToDouble() ? 0 : 1)} pack × ${packageKg.toStringAsFixed(0)} kg = ${kg.toStringAsFixed(1)} kg',
+                style: TextStyle(color: Colors.grey[700]),
+              ),
             ),
+            const SizedBox(height: 8),
+            Text('Total: ₱${total.toStringAsFixed(2)}',
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
             const SizedBox(height: 12),
             SizedBox(width: double.infinity, child: FilledButton.icon(
               icon: const Icon(Icons.add_shopping_cart),
               label: const Text('Add to Cart'),
-              onPressed: qty <= 0 || (unit == 'kg' ? qty : qty * product.sackKg) > product.stockKg ? null : () {
-                final kg = unit == 'sack' ? qty * product.sackKg : qty;
+              onPressed: qty <= 0 || kg > product.stockKg ? null : () {
                 context.read<StoreProvider>().addToCart(product, kg);
                 Navigator.pop(ctx);
               },
@@ -217,7 +256,6 @@ class _RiceCard extends StatelessWidget {
       }),
     );
   }
-}
 
 class _CartBar extends StatelessWidget {
   @override
@@ -363,44 +401,212 @@ class _InventoryPage extends StatelessWidget {
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             const Text('Inventory Value', style: TextStyle(fontWeight: FontWeight.bold)),
             Text('₱${store.inventoryValue.toStringAsFixed(2)}', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900)),
-            Text('Based on cost per kilogram'),
+            const Text('Based on cost per kilogram'),
           ])),
         ]))),
         const SizedBox(height: 8),
+        Card(child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: const [
+            Text('Rice Stock', style: TextStyle(fontWeight: FontWeight.w900)),
+            SizedBox(height: 4),
+            Text('Stock is stored in kilograms. Package counts are equivalent views of the same stock, not additional stock.'),
+          ]),
+        )),
+        const SizedBox(height: 8),
         ...store.products.map((p) => Card(
-          child: ListTile(
-            leading: CircleAvatar(child: Text(p.stockKg.toStringAsFixed(0))),
-            title: Text(p.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-            subtitle: Text('₱${p.pricePerKg.toStringAsFixed(2)}/kg • Cost ₱${p.costPerKg.toStringAsFixed(2)}/kg'),
-            trailing: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-              Text('${p.stockKg.toStringAsFixed(1)} kg'),
-              if (p.lowStock) const Text('LOW', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-            ]),
-            onTap: () => _restock(context, p),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: () => _productActions(context, p),
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Row(children: [
+                  CircleAvatar(child: Text(p.stockKg.toStringAsFixed(0))),
+                  const SizedBox(width: 12),
+                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(p.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                    Text(p.category, style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                  ])),
+                  Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                    Text('₱${p.pricePerKg.toStringAsFixed(2)}/kg',
+                      style: const TextStyle(fontWeight: FontWeight.w900)),
+                    Text('Cost ₱${p.costPerKg.toStringAsFixed(2)}/kg',
+                      style: TextStyle(color: Colors.grey[600], fontSize: 11)),
+                  ]),
+                ]),
+                const SizedBox(height: 10),
+                Row(children: [
+                  const Icon(Icons.scale, size: 18),
+                  const SizedBox(width: 6),
+                  Text('${p.stockKg.toStringAsFixed(1)} kg',
+                    style: const TextStyle(fontWeight: FontWeight.w800)),
+                  const SizedBox(width: 12),
+                  if (p.lowStock)
+                    const Text('LOW STOCK', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                ]),
+                const SizedBox(height: 7),
+                Wrap(spacing: 8, runSpacing: 6, children: [
+                  _PackageChip('10 kg', p.packagesFor(10)),
+                  _PackageChip('25 kg', p.packagesFor(25)),
+                  _PackageChip('50 kg', p.packagesFor(50)),
+                ]),
+                const SizedBox(height: 8),
+                Row(children: [
+                  Text('Default purchase pack: ${p.sackKg.toStringAsFixed(0)} kg',
+                    style: TextStyle(color: Colors.grey[700], fontSize: 12)),
+                  const Spacer(),
+                  const Icon(Icons.edit_outlined, size: 18),
+                  const SizedBox(width: 4),
+                  const Text('Edit'),
+                ]),
+              ]),
+            ),
           ),
         )),
       ],
     );
   }
 
-  void _restock(BuildContext context, RiceProduct product) {
-    final c = TextEditingController();
+  static void _productActions(BuildContext context, RiceProduct product) {
+    showModalBottomSheet(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ListTile(
+            leading: const Icon(Icons.sell_outlined),
+            title: const Text('Edit Selling Price'),
+            subtitle: Text('Current: ₱${product.pricePerKg.toStringAsFixed(2)} / kg'),
+            onTap: () {
+              Navigator.pop(ctx);
+              _editPrice(context, product);
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.add_box_outlined),
+            title: const Text('Add Stock'),
+            subtitle: Text('Default purchase pack: ${product.sackKg.toStringAsFixed(0)} kg'),
+            onTap: () {
+              Navigator.pop(ctx);
+              _restock(context, product);
+            },
+          ),
+        ]),
+      ),
+    );
+  }
+
+  static void _editPrice(BuildContext context, RiceProduct product) {
+    final c = TextEditingController(text: product.pricePerKg.toStringAsFixed(2));
     showDialog(context: context, builder: (ctx) => AlertDialog(
-      title: Text('Restock ${product.name}'),
+      title: Text('Edit Price • ${product.name}'),
       content: TextField(
         controller: c,
+        autofocus: true,
         keyboardType: const TextInputType.numberWithOptions(decimal: true),
-        decoration: const InputDecoration(labelText: 'Add kilograms', suffixText: 'kg'),
+        decoration: const InputDecoration(
+          labelText: 'Selling price per kilogram',
+          prefixText: '₱ ',
+          suffixText: '/ kg',
+        ),
       ),
       actions: [
         TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-        FilledButton(onPressed: () {
-          final kg = double.tryParse(c.text) ?? 0;
-          context.read<StoreProvider>().restock(product, kg);
-          Navigator.pop(ctx);
-        }, child: const Text('Add Stock')),
+        FilledButton(
+          onPressed: () async {
+            final price = double.tryParse(c.text.trim()) ?? 0;
+            if (price <= 0) return;
+            await context.read<StoreProvider>().updatePrice(product, price);
+            if (ctx.mounted) Navigator.pop(ctx);
+          },
+          child: const Text('Save Price'),
+        ),
       ],
     ));
+  }
+
+  static void _restock(BuildContext context, RiceProduct product) {
+    final c = TextEditingController();
+    double packageKg = product.sackKg;
+    String mode = 'package';
+
+    showDialog(context: context, builder: (ctx) => StatefulBuilder(builder: (ctx, setModal) {
+      final qty = double.tryParse(c.text) ?? 0;
+      final kg = mode == 'package' ? qty * packageKg : qty;
+      return AlertDialog(
+        title: Text('Add Stock • ${product.name}'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          SegmentedButton<String>(
+            segments: const [
+              ButtonSegment(value: 'package', label: Text('Pack')),
+              ButtonSegment(value: 'kg', label: Text('KG')),
+            ],
+            selected: {mode},
+            onSelectionChanged: (v) => setModal(() {
+              mode = v.first;
+              c.clear();
+            }),
+          ),
+          const SizedBox(height: 12),
+          if (mode == 'package')
+            SegmentedButton<double>(
+              segments: const [
+                ButtonSegment(value: 10, label: Text('10 kg')),
+                ButtonSegment(value: 25, label: Text('25 kg')),
+                ButtonSegment(value: 50, label: Text('50 kg')),
+              ],
+              selected: {packageKg},
+              onSelectionChanged: (v) => setModal(() {
+                packageKg = v.first;
+                c.clear();
+              }),
+            ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: c,
+            autofocus: true,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            onChanged: (_) => setModal(() {}),
+            decoration: InputDecoration(
+              labelText: mode == 'package'
+                  ? 'Number of ${packageKg.toStringAsFixed(0)} kg packs'
+                  : 'Add kilograms',
+              suffixText: mode == 'kg' ? 'kg' : 'packs',
+            ),
+          ),
+          if (qty > 0) ...[
+            const SizedBox(height: 8),
+            Text('Adds ${kg.toStringAsFixed(1)} kg to inventory',
+              style: TextStyle(color: Colors.grey[700])),
+          ],
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          FilledButton(onPressed: kg <= 0 ? null : () {
+            context.read<StoreProvider>().restock(product, kg);
+            Navigator.pop(ctx);
+          }, child: const Text('Add Stock')),
+        ],
+      );
+    }));
+  }
+}
+
+class _PackageChip extends StatelessWidget {
+  final String label;
+  final double count;
+  const _PackageChip(this.label, this.count);
+
+  @override
+  Widget build(BuildContext context) {
+    final countText = count == count.roundToDouble()
+        ? count.toStringAsFixed(0)
+        : count.toStringAsFixed(1);
+    return Chip(
+      avatar: const Icon(Icons.inventory_2_outlined, size: 16),
+      label: Text('$label: $countText'),
+      visualDensity: VisualDensity.compact,
+    );
   }
 }
 

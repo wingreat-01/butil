@@ -6,6 +6,7 @@ class RiceProduct {
   final double costPerKg;
   final double stockKg;
   final double lowStockKg;
+  /// Default purchase/restock package size for this rice.
   final double sackKg;
 
   const RiceProduct({
@@ -20,6 +21,12 @@ class RiceProduct {
   });
 
   bool get lowStock => stockKg <= lowStockKg;
+
+  /// Equivalent package count. This is only a view of the same kg stock.
+  double packagesFor(double packageKg) {
+    if (packageKg <= 0) return 0;
+    return stockKg / packageKg;
+  }
 
   RiceProduct copyWith({
     double? stockKg,
