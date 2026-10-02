@@ -256,6 +256,7 @@ class _RiceCard extends StatelessWidget {
       }),
     );
   }
+}
 
 class _CartBar extends StatelessWidget {
   @override
@@ -405,12 +406,23 @@ class _InventoryPage extends StatelessWidget {
           ])),
         ]))),
         const SizedBox(height: 8),
+        SizedBox(
+          width: double.infinity,
+          child: FilledButton.icon(
+            icon: const Icon(Icons.add_box_outlined),
+            label: const Text('Add New Stock'),
+            onPressed: () => _addProduct(context),
+          ),
+        ),
+        const SizedBox(height: 8),
         Card(child: Padding(
           padding: const EdgeInsets.all(14),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: const [
             Text('Rice Stock', style: TextStyle(fontWeight: FontWeight.w900)),
             SizedBox(height: 4),
             Text('Stock is stored in kilograms. Package counts are equivalent views of the same stock, not additional stock.'),
+            SizedBox(height: 4),
+            Text('Tap a rice item to add stock or edit its details, price, cost, package size, and low-stock alert.'),
           ]),
         )),
         const SizedBox(height: 8),
@@ -474,18 +486,18 @@ class _InventoryPage extends StatelessWidget {
       builder: (ctx) => SafeArea(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           ListTile(
-            leading: const Icon(Icons.sell_outlined),
-            title: const Text('Edit Selling Price'),
-            subtitle: Text('Current: ₱${product.pricePerKg.toStringAsFixed(2)} / kg'),
+            leading: const Icon(Icons.edit_outlined),
+            title: const Text('Edit Stock Details'),
+            subtitle: const Text('Name, category, price, cost, stock, alert, package size'),
             onTap: () {
               Navigator.pop(ctx);
-              _editPrice(context, product);
+              _editProduct(context, product);
             },
           ),
           ListTile(
             leading: const Icon(Icons.add_box_outlined),
-            title: const Text('Add Stock'),
-            subtitle: Text('Default purchase pack: ${product.sackKg.toStringAsFixed(0)} kg'),
+            title: const Text('Add Stock Quantity'),
+            subtitle: Text('Current stock: ${product.stockKg.toStringAsFixed(1)} kg'),
             onTap: () {
               Navigator.pop(ctx);
               _restock(context, product);
@@ -494,6 +506,81 @@ class _InventoryPage extends StatelessWidget {
         ]),
       ),
     );
+  }
+
+  static void _addProduct(BuildContext context) {
+    _productForm(context, null);
+  }
+
+  static void _editProduct(BuildContext context, RiceProduct product) {
+    _productForm(context, product);
+  }
+
+  static void _productForm(BuildContext context, RiceProduct? product) {
+    final isEdit = product != null;
+    final name = TextEditingController(text: product?.name ?? '');
+    final category = TextEditingController(text: product?.category ?? 'Regular');
+    final price = TextEditingController(text: product?.pricePerKg.toStringAsFixed(2) ?? '0');
+    final cost = TextEditingController(text: product?.costPerKg.toStringAsFixed(2) ?? '0');
+    final stock = TextEditingController(text: product?.stockKg.toStringAsFixed(1) ?? '0');
+    final lowStock = TextEditingController(text: product?.lowStockKg.toStringAsFixed(1) ?? '20');
+    double packageKg = product?.sackKg ?? 50;
+
+    showDialog(context: context, builder: (ctx) => StatefulBuilder(builder: (ctx, setModal) {
+      return AlertDialog(
+        title: Text(isEdit ? 'Edit Stock' : 'Add New Stock'),
+        content: SingleChildScrollView(
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            TextField(controller: name, autofocus: !isEdit, decoration: const InputDecoration(labelText: 'Rice name', prefixIcon: Icon(Icons.grain))),
+            const SizedBox(height: 10),
+            TextField(controller: category, decoration: const InputDecoration(labelText: 'Category', prefixIcon: Icon(Icons.category_outlined))),
+            const SizedBox(height: 10),
+            Row(children: [
+              Expanded(child: TextField(controller: price, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Selling price / kg', prefixText: '₱ '))),
+              const SizedBox(width: 8),
+              Expanded(child: TextField(controller: cost, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Cost / kg', prefixText: '₱ '))),
+            ]),
+            const SizedBox(height: 10),
+            TextField(controller: stock, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Current stock', suffixText: 'kg', prefixIcon: Icon(Icons.scale))),
+            const SizedBox(height: 10),
+            TextField(controller: lowStock, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Low-stock alert', suffixText: 'kg')),
+            const SizedBox(height: 12),
+            Align(alignment: Alignment.centerLeft, child: Text('Default purchase package', style: TextStyle(color: Colors.grey[700], fontSize: 12))),
+            const SizedBox(height: 6),
+            SizedBox(width: double.infinity, child: SegmentedButton<double>(
+              segments: const [
+                ButtonSegment(value: 10, label: Text('10 kg')),
+                ButtonSegment(value: 25, label: Text('25 kg')),
+                ButtonSegment(value: 50, label: Text('50 kg')),
+              ],
+              selected: {packageKg},
+              onSelectionChanged: (v) => setModal(() => packageKg = v.first),
+            )),
+          ]),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () async {
+              final n = name.text.trim();
+              final p = double.tryParse(price.text.trim()) ?? 0;
+              final c = double.tryParse(cost.text.trim()) ?? 0;
+              final s = double.tryParse(stock.text.trim()) ?? -1;
+              final l = double.tryParse(lowStock.text.trim()) ?? -1;
+              if (n.isEmpty || p <= 0 || c < 0 || s < 0 || l < 0) return;
+              final store = context.read<StoreProvider>();
+              if (isEdit) {
+                await store.updateProduct(product, name: n, category: category.text.trim(), pricePerKg: p, costPerKg: c, stockKg: s, lowStockKg: l, sackKg: packageKg);
+              } else {
+                await store.addProduct(name: n, category: category.text.trim(), pricePerKg: p, costPerKg: c, stockKg: s, lowStockKg: l, sackKg: packageKg);
+              }
+              if (ctx.mounted) Navigator.pop(ctx);
+            },
+            child: Text(isEdit ? 'Save Changes' : 'Add Stock'),
+          ),
+        ],
+      );
+    }));
   }
 
   static void _editPrice(BuildContext context, RiceProduct product) {

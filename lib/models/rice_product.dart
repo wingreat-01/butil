@@ -29,6 +29,8 @@ class RiceProduct {
   }
 
   RiceProduct copyWith({
+    String? name,
+    String? category,
     double? stockKg,
     double? pricePerKg,
     double? costPerKg,
@@ -37,8 +39,8 @@ class RiceProduct {
   }) {
     return RiceProduct(
       id: id,
-      name: name,
-      category: category,
+      name: name ?? this.name,
+      category: category ?? this.category,
       pricePerKg: pricePerKg ?? this.pricePerKg,
       costPerKg: costPerKg ?? this.costPerKg,
       stockKg: stockKg ?? this.stockKg,

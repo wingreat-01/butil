@@ -81,6 +81,55 @@ class StoreProvider extends ChangeNotifier {
     RiceProduct(id: '6', name: 'Brown Rice', category: 'Healthy', pricePerKg: 72, costPerKg: 62, stockKg: 70, lowStockKg: 20),
   ];
 
+  Future<void> addProduct({
+    required String name,
+    required String category,
+    required double pricePerKg,
+    required double costPerKg,
+    required double stockKg,
+    required double lowStockKg,
+    required double sackKg,
+  }) async {
+    final product = RiceProduct(
+      id: DateTime.now().microsecondsSinceEpoch.toString(),
+      name: name.trim(),
+      category: category.trim().isEmpty ? 'Uncategorized' : category.trim(),
+      pricePerKg: pricePerKg,
+      costPerKg: costPerKg,
+      stockKg: stockKg,
+      lowStockKg: lowStockKg,
+      sackKg: sackKg,
+    );
+    _products.add(product);
+    await _save();
+    notifyListeners();
+  }
+
+  Future<void> updateProduct(
+    RiceProduct product, {
+    required String name,
+    required String category,
+    required double pricePerKg,
+    required double costPerKg,
+    required double stockKg,
+    required double lowStockKg,
+    required double sackKg,
+  }) async {
+    final index = _products.indexWhere((p) => p.id == product.id);
+    if (index < 0) return;
+    _products[index] = product.copyWith(
+      name: name.trim(),
+      category: category.trim().isEmpty ? 'Uncategorized' : category.trim(),
+      pricePerKg: pricePerKg,
+      costPerKg: costPerKg,
+      stockKg: stockKg,
+      lowStockKg: lowStockKg,
+      sackKg: sackKg,
+    );
+    await _save();
+    notifyListeners();
+  }
+
   void setCategory(String value) {
     _category = value;
     notifyListeners();
