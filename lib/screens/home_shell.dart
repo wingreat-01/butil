@@ -387,12 +387,30 @@ class _Receipt extends StatelessWidget {
   );
 }
 
-class _InventoryPage extends StatelessWidget {
+class _InventoryPage extends StatefulWidget {
   const _InventoryPage();
+
+  @override
+  State<_InventoryPage> createState() => _InventoryPageState();
+}
+
+class _InventoryPageState extends State<_InventoryPage> {
+  final _stockSearch = TextEditingController();
+
+  @override
+  void dispose() {
+    _stockSearch.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final store = context.watch<StoreProvider>();
+    final query = _stockSearch.text.trim().toLowerCase();
+    final products = query.isEmpty
+        ? store.products
+        : store.products.where((p) => p.name.toLowerCase().contains(query)).toList();
+
     return ListView(
       padding: const EdgeInsets.all(12),
       children: [
@@ -415,6 +433,31 @@ class _InventoryPage extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 8),
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: TextField(
+            controller: _stockSearch,
+            onChanged: (_) => setState(() {}),
+            decoration: InputDecoration(
+              hintText: 'Search rice variety in stock...',
+              prefixIcon: const Icon(Icons.search),
+              suffixIcon: _stockSearch.text.isEmpty
+                  ? null
+                  : IconButton(
+                      icon: const Icon(Icons.clear),
+                      onPressed: () {
+                        _stockSearch.clear();
+                        setState(() {});
+                      },
+                    ),
+              filled: true,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: BorderSide.none,
+              ),
+            ),
+          ),
+        ),
         Card(child: Padding(
           padding: const EdgeInsets.all(14),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: const [
@@ -426,7 +469,12 @@ class _InventoryPage extends StatelessWidget {
           ]),
         )),
         const SizedBox(height: 8),
-        ...store.products.map((p) => Card(
+        if (products.isEmpty)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 36),
+            child: Center(child: Text('No rice varieties found.')),
+          ),
+        ...products.map((p) => Card(
           child: InkWell(
             borderRadius: BorderRadius.circular(12),
             onTap: () => _productActions(context, p),
@@ -525,6 +573,16 @@ class _InventoryPage extends StatelessWidget {
     final stock = TextEditingController(text: product?.stockKg.toStringAsFixed(1) ?? '0');
     final lowStock = TextEditingController(text: product?.lowStockKg.toStringAsFixed(1) ?? '20');
     double packageKg = product?.sackKg ?? 50;
+    String stockMode = 'kg';
+
+    void syncPackQuantity() {
+      final currentKg = double.tryParse(stock.text.trim()) ?? 0;
+      final packs = packageKg <= 0 ? 0 : currentKg / packageKg;
+      stock.text = packs == packs.roundToDouble()
+          ? packs.toStringAsFixed(0)
+          : packs.toStringAsFixed(1);
+      stock.selection = TextSelection.collapsed(offset: stock.text.length);
+    }
 
     showDialog(context: context, builder: (ctx) => StatefulBuilder(builder: (ctx, setModal) {
       return AlertDialog(
@@ -541,7 +599,64 @@ class _InventoryPage extends StatelessWidget {
               Expanded(child: TextField(controller: cost, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Cost / kg', prefixText: '₱ '))),
             ]),
             const SizedBox(height: 10),
-            TextField(controller: stock, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Current stock', suffixText: 'kg', prefixIcon: Icon(Icons.scale))),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text('Current stock', style: TextStyle(color: Colors.grey[700], fontSize: 12)),
+            ),
+            const SizedBox(height: 6),
+            SizedBox(
+              width: double.infinity,
+              child: SegmentedButton<String>(
+                segments: const [
+                  ButtonSegment(value: 'kg', label: Text('By KG'), icon: Icon(Icons.scale_outlined)),
+                  ButtonSegment(value: 'package', label: Text('By Pack'), icon: Icon(Icons.inventory_2_outlined)),
+                ],
+                selected: {stockMode},
+                onSelectionChanged: (v) {
+                  final next = v.first;
+                  setModal(() {
+                    if (next == 'package' && stockMode == 'kg') {
+                      syncPackQuantity();
+                    } else if (next == 'kg' && stockMode == 'package') {
+                      final packs = double.tryParse(stock.text.trim()) ?? 0;
+                      final kg = packs * packageKg;
+                      stock.text = kg == kg.roundToDouble()
+                          ? kg.toStringAsFixed(0)
+                          : kg.toStringAsFixed(1);
+                      stock.selection = TextSelection.collapsed(offset: stock.text.length);
+                    }
+                    stockMode = next;
+                  });
+                },
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: stock,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: InputDecoration(
+                labelText: stockMode == 'package'
+                    ? 'Number of ${packageKg.toStringAsFixed(0)} kg packs'
+                    : 'Current stock',
+                suffixText: stockMode == 'package' ? 'packs' : 'kg',
+                prefixIcon: Icon(stockMode == 'package' ? Icons.inventory_2_outlined : Icons.scale),
+              ),
+              onChanged: (_) => setModal(() {}),
+            ),
+            if (stockMode == 'package') ...[
+              const SizedBox(height: 6),
+              Builder(builder: (_) {
+                final packs = double.tryParse(stock.text.trim()) ?? 0;
+                final kg = packs * packageKg;
+                return Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Equivalent stock: ${kg.toStringAsFixed(1)} kg',
+                    style: TextStyle(color: Colors.grey[700], fontSize: 12),
+                  ),
+                );
+              }),
+            ],
             const SizedBox(height: 10),
             TextField(controller: lowStock, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Low-stock alert', suffixText: 'kg')),
             const SizedBox(height: 12),
@@ -554,7 +669,23 @@ class _InventoryPage extends StatelessWidget {
                 ButtonSegment(value: 50, label: Text('50 kg')),
               ],
               selected: {packageKg},
-              onSelectionChanged: (v) => setModal(() => packageKg = v.first),
+              onSelectionChanged: (v) {
+                final newPackageKg = v.first;
+                setModal(() {
+                  if (stockMode == 'package') {
+                    final packs = double.tryParse(stock.text.trim()) ?? 0;
+                    final kg = packs * packageKg;
+                    packageKg = newPackageKg;
+                    final newPacks = packageKg <= 0 ? 0 : kg / packageKg;
+                    stock.text = newPacks == newPacks.roundToDouble()
+                        ? newPacks.toStringAsFixed(0)
+                        : newPacks.toStringAsFixed(1);
+                    stock.selection = TextSelection.collapsed(offset: stock.text.length);
+                  } else {
+                    packageKg = newPackageKg;
+                  }
+                });
+              },
             )),
           ]),
         ),
@@ -565,9 +696,10 @@ class _InventoryPage extends StatelessWidget {
               final n = name.text.trim();
               final p = double.tryParse(price.text.trim()) ?? 0;
               final c = double.tryParse(cost.text.trim()) ?? 0;
-              final s = double.tryParse(stock.text.trim()) ?? -1;
+              final enteredStock = double.tryParse(stock.text.trim()) ?? -1;
+              final s = stockMode == 'package' ? enteredStock * packageKg : enteredStock;
               final l = double.tryParse(lowStock.text.trim()) ?? -1;
-              if (n.isEmpty || p <= 0 || c < 0 || s < 0 || l < 0) return;
+              if (n.isEmpty || p <= 0 || c < 0 || enteredStock < 0 || l < 0 || s < 0) return;
               final store = context.read<StoreProvider>();
               if (isEdit) {
                 await store.updateProduct(product, name: n, category: category.text.trim(), pricePerKg: p, costPerKg: c, stockKg: s, lowStockKg: l, sackKg: packageKg);
