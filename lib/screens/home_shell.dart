@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
+import 'package:share_plus/share_plus.dart';
 import '../state/store_provider.dart';
 import '../models/cart_item.dart';
 import '../models/rice_product.dart';
 import '../models/sale.dart';
+import 'paywall_screen.dart';
 
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key});
@@ -24,28 +26,41 @@ class _HomeShellState extends State<HomeShell> {
       _RegisterPage(search: _search),
       const _InventoryPage(),
       const _SalesPage(),
+      const _MorePage(),
     ];
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Bigasan POS', style: TextStyle(fontWeight: FontWeight.w800)),
+        title: Text(
+          _index == 0 ? 'New Sale' : _index == 1 ? 'Rice Stock' : _index == 2 ? 'Sales' : 'More',
+          style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 22),
+        ),
         actions: [
-          if (_index == 0)
-            IconButton(
-              tooltip: 'Clear cart',
-              icon: const Icon(Icons.remove_shopping_cart_outlined),
-              onPressed: store.cart.isEmpty ? null : store.clearCart,
+          if (_index == 0 && store.cart.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: IconButton(
+                tooltip: 'Clear cart',
+                icon: const Icon(Icons.delete_sweep_outlined),
+                onPressed: store.clearCart,
+              ),
             ),
         ],
       ),
-      body: pages[_index],
+      body: Column(
+        children: [
+          const TrialBanner(),
+          Expanded(child: pages[_index]),
+        ],
+      ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
         onDestinationSelected: (i) => setState(() => _index = i),
         destinations: const [
-          NavigationDestination(icon: Icon(Icons.point_of_sale), label: 'Register'),
-          NavigationDestination(icon: Icon(Icons.inventory_2_outlined), label: 'Stock'),
-          NavigationDestination(icon: Icon(Icons.bar_chart_outlined), label: 'Sales'),
+          NavigationDestination(icon: Icon(Icons.point_of_sale_outlined), selectedIcon: Icon(Icons.point_of_sale), label: 'Sell'),
+          NavigationDestination(icon: Icon(Icons.inventory_2_outlined), selectedIcon: Icon(Icons.inventory_2), label: 'Stock'),
+          NavigationDestination(icon: Icon(Icons.bar_chart_outlined), selectedIcon: Icon(Icons.bar_chart), label: 'Sales'),
+          NavigationDestination(icon: Icon(Icons.more_horiz), selectedIcon: Icon(Icons.more), label: 'More'),
         ],
       ),
     );
@@ -65,7 +80,29 @@ class _RegisterPage extends StatelessWidget {
     return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(12, 12, 12, 6),
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+          child: Row(
+            children: [
+              Expanded(
+                child: _MiniSummary(
+                  icon: Icons.payments_outlined,
+                  label: 'Today',
+                  value: '₱${store.todayRevenue.toStringAsFixed(0)}',
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _MiniSummary(
+                  icon: Icons.scale_outlined,
+                  label: 'Sold today',
+                  value: '${store.todayKg.toStringAsFixed(0)} kg',
+                ),
+              ),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
           child: TextField(
             controller: search,
             onChanged: (_) => (context as Element).markNeedsBuild(),
@@ -102,8 +139,10 @@ class _RegisterPage extends StatelessWidget {
             : GridView.builder(
                 padding: const EdgeInsets.all(12),
                 gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                  maxCrossAxisExtent: 210, childAspectRatio: .95,
-                  crossAxisSpacing: 10, mainAxisSpacing: 10,
+                  maxCrossAxisExtent: 210,
+                  mainAxisExtent: 205,
+                  crossAxisSpacing: 10,
+                  mainAxisSpacing: 10,
                 ),
                 itemCount: products.length,
                 itemBuilder: (_, i) => _RiceCard(product: products[i]),
@@ -119,46 +158,88 @@ class _RiceCard extends StatelessWidget {
   final RiceProduct product;
   const _RiceCard({required this.product});
 
-  String _formatPackageCount(double value) {
-    if (value == value.roundToDouble()) return value.toStringAsFixed(0);
-    return value.toStringAsFixed(1);
-  }
-
   @override
   Widget build(BuildContext context) {
-    final store = context.read<StoreProvider>();
+    final canSell = product.stockKg > 0;
     return Card(
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: product.stockKg <= 0 ? null : () => _showQuantity(context, product),
+        onTap: canSell ? () => _showQuantity(context, product) : null,
         child: Padding(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(14),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: Container(
-                  width: double.infinity,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFE8F1E8),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Center(child: Icon(Icons.grain, size: 48)),
+              Container(
+                height: 72,
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEAF4EC),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Stack(
+                  children: [
+                    const Center(child: Icon(Icons.grain, size: 42)),
+                    if (product.lowStock && canSell)
+                      Positioned(
+                        top: 7,
+                        right: 7,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFFE9E7),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: const Text(
+                            'LOW',
+                            style: TextStyle(
+                              color: Color(0xFFC62828),
+                              fontSize: 10,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 8),
-              Text(product.name, maxLines: 2, overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontWeight: FontWeight.w800)),
-              Text('₱${product.pricePerKg.toStringAsFixed(2)} / kg'),
-              Text('${product.stockKg.toStringAsFixed(1)} kg in stock',
-                style: TextStyle(color: product.lowStock ? Colors.red : Colors.grey[700], fontSize: 12)),
-              const SizedBox(height: 2),
-              Text('10kg: ${_formatPackageCount(product.packagesFor(10))} • '
-                   '25kg: ${_formatPackageCount(product.packagesFor(25))} • '
-                   '50kg: ${_formatPackageCount(product.packagesFor(50))}',
-                style: TextStyle(color: Colors.grey[600], fontSize: 10)),
-              if (product.lowStock)
-                const Text('LOW STOCK', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 11)),
+              const SizedBox(height: 10),
+              Text(
+                product.name,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                '₱${product.pricePerKg.toStringAsFixed(2)} / kg',
+                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+              ),
+              const Spacer(),
+              Row(
+                children: [
+                  Icon(
+                    canSell ? Icons.inventory_2_outlined : Icons.remove_shopping_cart_outlined,
+                    size: 16,
+                    color: canSell ? Colors.grey[700] : const Color(0xFFC62828),
+                  ),
+                  const SizedBox(width: 5),
+                  Expanded(
+                    child: Text(
+                      canSell
+                          ? '${product.stockKg.toStringAsFixed(1)} kg available'
+                          : 'Out of stock',
+                      style: TextStyle(
+                        color: canSell ? Colors.grey[700] : const Color(0xFFC62828),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  if (canSell)
+                    const Icon(Icons.add_circle, size: 21),
+                ],
+              ),
             ],
           ),
         ),
@@ -218,6 +299,23 @@ class _RiceCard extends StatelessWidget {
                 ),
               ),
             if (unit == 'package') const SizedBox(height: 10),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                unit == 'kg' ? 'Quick quantity' : 'Quick packs',
+                style: const TextStyle(fontWeight: FontWeight.w800),
+              ),
+            ),
+            const SizedBox(height: 7),
+            Wrap(
+              spacing: 7,
+              runSpacing: 7,
+              children: (unit == 'kg' ? <double>[1, 2, 5, 10, 25] : <double>[1, 2, 3, 5]).map((v) => OutlinedButton(
+                onPressed: () { controller.text = v.toString(); setModal(() {}); },
+                child: Text(unit == 'kg' ? '${v.toStringAsFixed(v == v.roundToDouble() ? 0 : 1)} kg' : '${v.toStringAsFixed(0)} pack'),
+              )).toList(),
+            ),
+            const SizedBox(height: 8),
             TextField(
               controller: controller,
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -288,54 +386,208 @@ class _CartBar extends StatelessWidget {
   void _checkout(BuildContext context) {
     final store = context.read<StoreProvider>();
     final controller = TextEditingController();
+    String paymentMethod = 'Cash';
+    final customerController = TextEditingController();
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       builder: (ctx) => StatefulBuilder(builder: (ctx, setModal) {
         final cash = double.tryParse(controller.text) ?? 0;
         final change = cash - store.cartTotal;
+        final isUtang = paymentMethod == 'Utang';
+        final isCash = paymentMethod == 'Cash';
         return Padding(
           padding: EdgeInsets.only(
-            left: 20, right: 20, top: 20,
+            left: 20, right: 20, top: 16,
             bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
           ),
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            const Text('Checkout', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
-            const SizedBox(height: 6),
-            Text('Amount Due', style: TextStyle(color: Colors.grey[600])),
-            Text('₱${store.cartTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w900)),
+          child: SafeArea(
+            top: false,
+            child: SingleChildScrollView(
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Text('Checkout', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900)),
+                    ),
+                    TextButton.icon(
+                      onPressed: store.cart.isEmpty ? null : () {
+                        store.clearCart();
+                        Navigator.pop(ctx);
+                      },
+                      icon: const Icon(Icons.delete_sweep_outlined, size: 19),
+                      label: const Text('Clear cart'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Card(
+                  color: const Color(0xFFF8FAF7),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
+                    child: Column(
+                      children: [
+                        Row(
+                          children: [
+                            const Expanded(
+                              child: Text('Order summary', style: TextStyle(fontWeight: FontWeight.w900)),
+                            ),
+                            Text(
+                              '${store.cartLines} item${store.cartLines == 1 ? '' : 's'}',
+                              style: TextStyle(color: Colors.grey[700], fontSize: 12, fontWeight: FontWeight.w700),
+                            ),
+                          ],
+                        ),
+                        const Divider(height: 16),
+                        ...store.cart.map((item) => Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              Container(
+                                width: 40, height: 40,
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFEAF4EC),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: const Icon(Icons.grain, size: 21, color: Color(0xFF287A45)),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(item.product.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800)),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      '${item.quantityKg.toStringAsFixed(item.quantityKg % 1 == 0 ? 0 : 1)} kg × ₱${item.product.pricePerKg.toStringAsFixed(2)}',
+                                      style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Text('₱${item.total.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.w900)),
+                              IconButton(
+                                tooltip: 'Remove item',
+                                visualDensity: VisualDensity.compact,
+                                icon: const Icon(Icons.delete_outline, size: 20),
+                                onPressed: () {
+                                  store.setCartQuantity(item, 0);
+                                  setModal(() {});
+                                },
+                              ),
+                            ],
+                          ),
+                        )),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text('Amount to collect', style: TextStyle(color: Colors.grey[600])),
+                Text('₱${store.cartTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w900)),
+                const SizedBox(height: 12),
+            SegmentedButton<String>(
+              segments: const [
+                ButtonSegment(value: 'Cash', label: Text('Cash'), icon: Icon(Icons.payments_outlined)),
+                ButtonSegment(value: 'GCash', label: Text('GCash'), icon: Icon(Icons.phone_android)),
+                ButtonSegment(value: 'Utang', label: Text('Utang'), icon: Icon(Icons.account_balance_wallet_outlined)),
+              ],
+              selected: {paymentMethod},
+              onSelectionChanged: (v) => setModal(() { paymentMethod = v.first; }),
+            ),
             const SizedBox(height: 12),
-            TextField(
+            if (isUtang) TextField(
+              controller: customerController,
+              onChanged: (_) => setModal(() {}),
+              decoration: const InputDecoration(labelText: 'Customer name', prefixIcon: Icon(Icons.person_outline)),
+            ),
+            if (isUtang) const SizedBox(height: 10),
+            if (isCash) TextField(
               controller: controller,
               autofocus: true,
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
               onChanged: (_) => setModal(() {}),
-              decoration: const InputDecoration(labelText: 'Cash received', prefixText: '₱ '),
+              decoration: InputDecoration(
+                labelText: 'Cash received',
+                prefixText: '₱ ',
+                suffixIcon: controller.text.isEmpty
+                    ? null
+                    : IconButton(
+                        tooltip: 'Clear amount',
+                        icon: const Icon(Icons.clear),
+                        onPressed: () {
+                          controller.clear();
+                          setModal(() {});
+                        },
+                      ),
+              ),
             ),
+            if (paymentMethod == 'GCash')
+              const Align(alignment: Alignment.centerLeft, child: Text('Mark as paid via GCash. No change is calculated.', style: TextStyle(fontSize: 12))),
             const SizedBox(height: 10),
-            Wrap(spacing: 8, children: [100, 200, 500, 1000].map((v) => OutlinedButton(
-              onPressed: () { controller.text = v.toString(); setModal(() {}); },
-              child: Text('₱$v'),
-            )).toList()),
+            if (isCash) ...[
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text('Quick cash', style: TextStyle(fontSize: 12, color: Colors.grey[700], fontWeight: FontWeight.w700)),
+              ),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 8,
+                children: _quickCashAmounts(store.cartTotal).map((v) => OutlinedButton(
+                  onPressed: () { controller.text = v.toStringAsFixed(0); setModal(() {}); },
+                  child: Text('₱${v.toStringAsFixed(0)}'),
+                )).toList(),
+              ),
+            ],
             const SizedBox(height: 8),
-            if (cash >= store.cartTotal)
-              Text('Change: ₱${change.toStringAsFixed(2)}',
-                style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: Colors.green)),
+            if (isCash && cash >= store.cartTotal)
+              Text('CHANGE  ₱${change.toStringAsFixed(2)}',
+                style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w900, color: Color(0xFF287A45))),
             const SizedBox(height: 12),
             SizedBox(width: double.infinity, child: FilledButton(
-              onPressed: cash < store.cartTotal ? null : () async {
-                await store.checkout(cash);
-                if (ctx.mounted) {
-                  Navigator.pop(ctx);
-                  _receipt(context);
-                }
-              },
+              onPressed: isUtang
+                  ? (customerController.text.trim().isEmpty ? null : () async {
+                      await store.checkout(0, paymentMethod: paymentMethod, customerName: customerController.text.trim());
+                      if (ctx.mounted) { Navigator.pop(ctx); _receipt(context); }
+                    })
+                  : (isCash && cash < store.cartTotal ? null : () async {
+                      await store.checkout(isCash ? cash : store.cartTotal, paymentMethod: paymentMethod);
+                      if (ctx.mounted) {
+                        Navigator.pop(ctx);
+                        _receipt(context);
+                      }
+                    }),
               child: const Text('Complete Sale'),
             )),
           ]),
-        );
+        ),
+      ),
+    );
       }),
     );
+  }
+
+  String _receiptText(Sale sale) {
+    final b = StringBuffer();
+    b.writeln('BIGASAN POS');
+    b.writeln('Sales Receipt');
+    b.writeln(DateFormat('MMM d, yyyy • h:mm a').format(sale.timestamp));
+    b.writeln('--------------------');
+    for (final l in sale.lines) {
+      b.writeln('${l.productName}');
+      b.writeln('${l.quantityKg.toStringAsFixed(1)} kg × ₱${l.pricePerKg.toStringAsFixed(2)} = ₱${l.total.toStringAsFixed(2)}');
+    }
+    b.writeln('--------------------');
+    b.writeln('TOTAL: ₱${sale.total.toStringAsFixed(2)}');
+    b.writeln('PAYMENT: ${sale.paymentMethod}');
+    if (sale.paymentMethod == 'Cash') {
+      b.writeln('CASH: ₱${sale.cash.toStringAsFixed(2)}');
+      b.writeln('CHANGE: ₱${sale.change.toStringAsFixed(2)}');
+    }
+    if (sale.paymentMethod == 'Utang') b.writeln('CUSTOMER: ${sale.customerName ?? ''}');
+    return b.toString();
   }
 
   void _receipt(BuildContext context) {
@@ -345,6 +597,12 @@ class _CartBar extends StatelessWidget {
       title: const Text('Sale Complete'),
       content: _Receipt(sale: sale),
       actions: [
+        TextButton(
+          onPressed: () async {
+            await Share.share(_receiptText(sale));
+          },
+          child: const Text('Share'),
+        ),
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('Done')),
       ],
     ));
@@ -372,8 +630,13 @@ class _Receipt extends StatelessWidget {
         )),
         const Divider(),
         _r('TOTAL', sale.total),
-        _r('CASH', sale.cash),
-        _r('CHANGE', sale.change),
+        if (sale.paymentMethod == 'Cash') ...[
+          _r('CASH', sale.cash),
+          _r('CHANGE', sale.change),
+        ],
+        const SizedBox(height: 4),
+        Text('Payment: ${sale.paymentMethod}', style: const TextStyle(fontWeight: FontWeight.w700)),
+        if (sale.customerName != null) Text('Customer: ${sale.customerName}'),
         const SizedBox(height: 8),
         Center(child: Text(DateFormat('MMM d, yyyy • h:mm a').format(sale.timestamp),
           style: TextStyle(fontSize: 11, color: Colors.grey[600]))),
@@ -458,16 +721,29 @@ class _InventoryPageState extends State<_InventoryPage> {
             ),
           ),
         ),
-        Card(child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: const [
-            Text('Rice Stock', style: TextStyle(fontWeight: FontWeight.w900)),
-            SizedBox(height: 4),
-            Text('Stock is stored in kilograms. Package counts are equivalent views of the same stock, not additional stock.'),
-            SizedBox(height: 4),
-            Text('Tap a rice item to add stock or edit its details, price, cost, package size, and low-stock alert.'),
-          ]),
-        )),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Inventory', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
+                      const SizedBox(height: 3),
+                      Text(
+                        '${products.length} rice varieties',
+                        style: TextStyle(color: Colors.grey[700]),
+                      ),
+                    ],
+                  ),
+                ),
+                _InventoryAlertCount(products: products),
+              ],
+            ),
+          ),
+        ),
         const SizedBox(height: 8),
         if (products.isEmpty)
           const Padding(
@@ -476,54 +752,63 @@ class _InventoryPageState extends State<_InventoryPage> {
           ),
         ...products.map((p) => Card(
           child: InkWell(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(18),
             onTap: () => _productActions(context, p),
             child: Padding(
-              padding: const EdgeInsets.all(14),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Row(children: [
-                  CircleAvatar(child: Text(p.stockKg.toStringAsFixed(0))),
+              padding: const EdgeInsets.all(15),
+              child: Row(
+                children: [
+                  Container(
+                    width: 54,
+                    height: 54,
+                    decoration: BoxDecoration(
+                      color: p.lowStock ? const Color(0xFFFFEEEC) : const Color(0xFFEAF4EC),
+                      borderRadius: BorderRadius.circular(15),
+                    ),
+                    child: Icon(
+                      Icons.grain,
+                      color: p.lowStock ? const Color(0xFFC62828) : const Color(0xFF287A45),
+                    ),
+                  ),
                   const SizedBox(width: 12),
-                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(p.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                    Text(p.category, style: TextStyle(color: Colors.grey[600], fontSize: 12)),
-                  ])),
-                  Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                    Text('₱${p.pricePerKg.toStringAsFixed(2)}/kg',
-                      style: const TextStyle(fontWeight: FontWeight.w900)),
-                    Text('Cost ₱${p.costPerKg.toStringAsFixed(2)}/kg',
-                      style: TextStyle(color: Colors.grey[600], fontSize: 11)),
-                  ]),
-                ]),
-                const SizedBox(height: 10),
-                Row(children: [
-                  const Icon(Icons.scale, size: 18),
-                  const SizedBox(width: 6),
-                  Text('${p.stockKg.toStringAsFixed(1)} kg',
-                    style: const TextStyle(fontWeight: FontWeight.w800)),
-                  const SizedBox(width: 12),
-                  if (p.lowStock)
-                    const Text('LOW STOCK', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-                ]),
-                const SizedBox(height: 7),
-                Wrap(spacing: 8, runSpacing: 6, children: [
-                  _PackageChip('10 kg', p.packagesFor(10)),
-                  _PackageChip('25 kg', p.packagesFor(25)),
-                  _PackageChip('50 kg', p.packagesFor(50)),
-                ]),
-                const SizedBox(height: 8),
-                Row(children: [
-                  Text('Default purchase pack: ${p.sackKg.toStringAsFixed(0)} kg',
-                    style: TextStyle(color: Colors.grey[700], fontSize: 12)),
-                  const Spacer(),
-                  const Icon(Icons.edit_outlined, size: 18),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(p.name, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15)),
+                        const SizedBox(height: 3),
+                        Text(
+                          '${p.stockKg.toStringAsFixed(1)} kg in stock',
+                          style: TextStyle(
+                            color: p.lowStock ? const Color(0xFFC62828) : Colors.grey[700],
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 5),
+                        Text(
+                          'Selling ₱${p.pricePerKg.toStringAsFixed(2)} / kg',
+                          style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 5,
+                          children: [
+                            _StockPackChip(label: '10kg', count: p.packagesFor(10)),
+                            _StockPackChip(label: '25kg', count: p.packagesFor(25)),
+                            _StockPackChip(label: '50kg', count: p.packagesFor(50)),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
                   const SizedBox(width: 4),
-                  const Text('Edit'),
-                ]),
-              ]),
+                  Icon(Icons.chevron_right, color: Colors.grey[500]),
+                ],
+              ),
             ),
           ),
-        )),
+        )), 
       ],
     );
   }
@@ -746,6 +1031,8 @@ class _InventoryPageState extends State<_InventoryPage> {
 
   static void _restock(BuildContext context, RiceProduct product) {
     final c = TextEditingController();
+    final cost = TextEditingController(text: product.costPerKg.toStringAsFixed(2));
+    final supplier = TextEditingController();
     double packageKg = product.sackKg;
     String mode = 'package';
 
@@ -798,11 +1085,24 @@ class _InventoryPageState extends State<_InventoryPage> {
             Text('Adds ${kg.toStringAsFixed(1)} kg to inventory',
               style: TextStyle(color: Colors.grey[700])),
           ],
+          const SizedBox(height: 12),
+          TextField(
+            controller: cost,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: const InputDecoration(labelText: 'Cost per kg', prefixText: '₱ '),
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: supplier,
+            decoration: const InputDecoration(labelText: 'Supplier (optional)', prefixIcon: Icon(Icons.local_shipping_outlined)),
+          ),
         ]),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           FilledButton(onPressed: kg <= 0 ? null : () {
-            context.read<StoreProvider>().restock(product, kg);
+            final costValue = double.tryParse(cost.text.trim()) ?? product.costPerKg;
+            if (costValue < 0) return;
+            context.read<StoreProvider>().restock(product, kg, costPerKg: costValue, supplier: supplier.text);
             Navigator.pop(ctx);
           }, child: const Text('Add Stock')),
         ],
@@ -835,38 +1135,314 @@ class _SalesPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final store = context.watch<StoreProvider>();
+    final todayCount = store.todaySales.length;
     return ListView(
       padding: const EdgeInsets.all(12),
       children: [
         Row(children: [
-          Expanded(child: _Metric('Today Sales', '₱${store.todayRevenue.toStringAsFixed(2)}', Icons.payments)),
+          Expanded(child: _Metric('Today sales', '₱${store.todayRevenue.toStringAsFixed(0)}', Icons.payments_outlined)),
           const SizedBox(width: 8),
-          Expanded(child: _Metric('Rice Sold', '${store.todayKg.toStringAsFixed(1)} kg', Icons.scale)),
+          Expanded(child: _Metric('Est. profit', '₱${store.todayProfit.toStringAsFixed(0)}', Icons.trending_up_outlined)),
         ]),
-        const SizedBox(height: 12),
-        _Metric('Transactions', '${store.sales.where((s) {
-          final n = DateTime.now();
-          return s.timestamp.year == n.year && s.timestamp.month == n.month && s.timestamp.day == n.day;
-        }).length}', Icons.receipt_long),
+        const SizedBox(height: 8),
+        Row(children: [
+          Expanded(child: _Metric('Rice sold', '${store.todayKg.toStringAsFixed(0)} kg', Icons.scale_outlined)),
+          const SizedBox(width: 8),
+          Expanded(child: _Metric('Transactions', '$todayCount', Icons.receipt_long_outlined)),
+        ]),
         const SizedBox(height: 16),
-        const Text('Transaction History', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                const Icon(Icons.account_balance_wallet_outlined, color: Color(0xFF287A45)),
+                const SizedBox(width: 10),
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const Text('Customer receivables', style: TextStyle(fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 2),
+                  Text('Unpaid utang: ₱${store.totalReceivables.toStringAsFixed(2)}', style: TextStyle(color: Colors.grey[700])),
+                ])),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 18),
+        const Text('Recent transactions', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w900)),
         const SizedBox(height: 8),
         if (store.sales.isEmpty)
           const Padding(padding: EdgeInsets.all(24), child: Center(child: Text('No sales yet.')))
         else
           ...store.sales.reversed.map((s) => Card(
             child: ExpansionTile(
-              title: Text('₱${s.total.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.w900)),
-              subtitle: Text('${DateFormat('MMM d, h:mm a').format(s.timestamp)} • ${s.lines.fold(0.0, (a, l) => a + l.quantityKg).toStringAsFixed(1)} kg'),
-              children: s.lines.map((l) => ListTile(
-                dense: true,
-                title: Text(l.productName),
-                subtitle: Text('${l.quantityKg.toStringAsFixed(1)} kg × ₱${l.pricePerKg.toStringAsFixed(2)}'),
-                trailing: Text('₱${l.total.toStringAsFixed(2)}'),
-              )).toList(),
+              title: Row(children: [
+                Expanded(child: Text('₱${s.total.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.w900))),
+                _PaymentChip(s.paymentMethod),
+              ]),
+              subtitle: Text('${DateFormat('MMM d, h:mm a').format(s.timestamp)} • ${s.lines.fold(0.0, (a, l) => a + l.quantityKg).toStringAsFixed(1)} kg${s.customerName == null ? '' : ' • ${s.customerName}'}'),
+              children: [
+                ...s.lines.map((l) => ListTile(
+                  dense: true,
+                  title: Text(l.productName),
+                  subtitle: Text('${l.quantityKg.toStringAsFixed(1)} kg × ₱${l.pricePerKg.toStringAsFixed(2)}'),
+                  trailing: Text('₱${l.total.toStringAsFixed(2)}'),
+                )),
+                if (s.paymentMethod == 'Cash') ListTile(dense: true, title: const Text('Change'), trailing: Text('₱${s.change.toStringAsFixed(2)}')),
+              ],
             ),
           )),
       ],
+    );
+  }
+}
+
+class _PaymentChip extends StatelessWidget {
+  final String method;
+  const _PaymentChip(this.method);
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+    decoration: BoxDecoration(color: const Color(0xFFEAF4EC), borderRadius: BorderRadius.circular(20)),
+    child: Text(method, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: Color(0xFF287A45))),
+  );
+}
+
+class _MorePage extends StatelessWidget {
+  const _MorePage();
+
+  @override
+  Widget build(BuildContext context) {
+    final store = context.watch<StoreProvider>();
+    final low = store.products.where((p) => p.lowStock).toList();
+    return ListView(
+      padding: const EdgeInsets.all(12),
+      children: [
+        const Text('Business tools', style: TextStyle(fontSize: 21, fontWeight: FontWeight.w900)),
+        const SizedBox(height: 10),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                const Icon(Icons.warning_amber_rounded, color: Color(0xFFC62828)),
+                const SizedBox(width: 8),
+                const Expanded(child: Text('Low-stock dashboard', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900))),
+                Text('${low.length}', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
+              ]),
+              const SizedBox(height: 8),
+              if (low.isEmpty) const Text('Everything is above its low-stock alert.')
+              else ...low.map((p) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 5),
+                child: Row(children: [
+                  Expanded(child: Text(p.name, style: const TextStyle(fontWeight: FontWeight.w700))),
+                  Text('${p.stockKg.toStringAsFixed(1)} kg', style: const TextStyle(color: Color(0xFFC62828), fontWeight: FontWeight.w800)),
+                ]),
+              )),
+            ]),
+          ),
+        ),
+        const SizedBox(height: 10),
+        Card(child: ListTile(
+          leading: const CircleAvatar(child: Icon(Icons.people_alt_outlined)),
+          title: const Text('Customers & Utang', style: TextStyle(fontWeight: FontWeight.w900)),
+          subtitle: Text('${store.customers.length} customers • ₱${store.totalReceivables.toStringAsFixed(2)} unpaid'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => _showCustomers(context),
+        )),
+        Card(child: ListTile(
+          leading: const CircleAvatar(child: Icon(Icons.local_shipping_outlined)),
+          title: const Text('Restock history', style: TextStyle(fontWeight: FontWeight.w900)),
+          subtitle: Text('${store.restocks.length} stock deliveries recorded'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => _showRestocks(context),
+        )),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(children: [
+              const Icon(Icons.inventory_2_outlined, color: Color(0xFF287A45)),
+              const SizedBox(width: 10),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const Text('Inventory value', style: TextStyle(fontWeight: FontWeight.w800)),
+                Text('Estimated cost of current stock', style: TextStyle(color: Colors.grey[700], fontSize: 12)),
+              ])),
+              Text('₱${store.inventoryValue.toStringAsFixed(0)}', style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w900)),
+            ]),
+          ),
+        ),
+      ],
+    );
+  }
+
+  static void _showCustomers(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) {
+        final store = ctx.watch<StoreProvider>();
+        return SafeArea(child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            const Text('Customers & Utang', style: TextStyle(fontSize: 21, fontWeight: FontWeight.w900)),
+            const SizedBox(height: 10),
+            if (store.customers.isEmpty) const Padding(padding: EdgeInsets.all(24), child: Text('No unpaid customers yet.'))
+            else ...store.customers.map((c) => ListTile(
+              leading: const CircleAvatar(child: Icon(Icons.person_outline)),
+              title: Text(c.name, style: const TextStyle(fontWeight: FontWeight.w800)),
+              subtitle: Text('Balance: ₱${c.balance.toStringAsFixed(2)}'),
+              trailing: c.balance > 0 ? FilledButton.tonal(
+                onPressed: () => _recordPayment(ctx, c),
+                child: const Text('Bayad'),
+              ) : const Text('Paid'),
+            )),
+          ]),
+        ));
+      },
+    );
+  }
+
+  static void _recordPayment(BuildContext context, dynamic customer) {
+    final c = TextEditingController(text: customer.balance.toStringAsFixed(2));
+    showDialog(context: context, builder: (ctx) => AlertDialog(
+      title: Text('Payment • ${customer.name}'),
+      content: TextField(controller: c, autofocus: true, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Amount paid', prefixText: '₱ ')),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+        FilledButton(onPressed: () async {
+          final amount = double.tryParse(c.text.trim()) ?? 0;
+          if (amount <= 0) return;
+          await context.read<StoreProvider>().recordPayment(customer, amount);
+          if (ctx.mounted) Navigator.pop(ctx);
+        }, child: const Text('Save Payment')),
+      ],
+    ));
+  }
+
+  static void _showRestocks(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) {
+        final store = ctx.watch<StoreProvider>();
+        return SafeArea(child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            const Text('Restock history', style: TextStyle(fontSize: 21, fontWeight: FontWeight.w900)),
+            const SizedBox(height: 10),
+            if (store.restocks.isEmpty) const Padding(padding: EdgeInsets.all(24), child: Text('No restocks recorded yet.'))
+            else ...store.restocks.take(20).map((r) => ListTile(
+              leading: const CircleAvatar(child: Icon(Icons.local_shipping_outlined)),
+              title: Text(r.productName, style: const TextStyle(fontWeight: FontWeight.w800)),
+              subtitle: Text('${r.quantityKg.toStringAsFixed(1)} kg • ${r.supplier} • ${DateFormat('MMM d, yyyy').format(r.timestamp)}'),
+              trailing: Text('₱${r.totalCost.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.w900)),
+            )),
+          ]),
+        ));
+      },
+    );
+  }
+}
+
+
+List<double> _quickCashAmounts(double total) {
+  if (total <= 0) return const [];
+
+  // First option: the smallest convenient amount above the total,
+  // rounded to the nearest ₱100. Second option: the next larger
+  // commonly used cash amount (₱500/₱1,000/etc.).
+  final first = (total / 100).ceil() * 100.0;
+  double second;
+  if (first < 500) {
+    second = 500;
+  } else if (first < 1000) {
+    second = 1000;
+  } else {
+    second = ((first / 500).ceil() * 500).toDouble();
+    if (second <= first) second = first + 500;
+  }
+
+  // If the first option already equals a common larger amount, move to
+  // the next option so the two buttons are always useful.
+  if (second == first) second += 500;
+  return [first, second];
+}
+
+class _MiniSummary extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  const _MiniSummary({required this.icon, required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
+        child: Row(
+          children: [
+            Icon(icon, size: 20, color: const Color(0xFF287A45)),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label, style: TextStyle(fontSize: 11, color: Colors.grey[700])),
+                  const SizedBox(height: 1),
+                  Text(value, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w900)),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StockPackChip extends StatelessWidget {
+  final String label;
+  final double count;
+  const _StockPackChip({required this.label, required this.count});
+
+  @override
+  Widget build(BuildContext context) {
+    final wholePacks = count.floor();
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF1F4F1),
+        borderRadius: BorderRadius.circular(9),
+        border: Border.all(color: const Color(0xFFDDE5DD)),
+      ),
+      child: Text(
+        '$label • $wholePacks ${wholePacks == 1 ? 'pack' : 'packs'}',
+        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
+      ),
+    );
+  }
+}
+
+class _InventoryAlertCount extends StatelessWidget {
+  final List<RiceProduct> products;
+  const _InventoryAlertCount({required this.products});
+
+  @override
+  Widget build(BuildContext context) {
+    final low = products.where((p) => p.lowStock).length;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: low == 0 ? const Color(0xFFEAF4EC) : const Color(0xFFFFEEEC),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        low == 0 ? 'Stock OK' : '$low low stock',
+        style: TextStyle(
+          color: low == 0 ? const Color(0xFF287A45) : const Color(0xFFC62828),
+          fontWeight: FontWeight.w900,
+          fontSize: 12,
+        ),
+      ),
     );
   }
 }
@@ -879,12 +1455,12 @@ class _Metric extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Card(
-    child: Padding(padding: const EdgeInsets.all(16), child: Row(children: [
-      Icon(icon, size: 30),
+    child: Padding(padding: const EdgeInsets.all(15), child: Row(children: [
+      Icon(icon, size: 27, color: const Color(0xFF287A45)),
       const SizedBox(width: 10),
       Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(title, style: TextStyle(color: Colors.grey[700])),
-        Text(value, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
+        Text(value, style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w900)),
       ])),
     ])),
   );

@@ -19,6 +19,8 @@ class Sale {
   final double total;
   final double cash;
   final double change;
+  final String paymentMethod;
+  final String? customerName;
 
   const Sale({
     required this.id,
@@ -27,5 +29,7 @@ class Sale {
     required this.total,
     required this.cash,
     required this.change,
+    this.paymentMethod = 'Cash',
+    this.customerName,
   });
 }

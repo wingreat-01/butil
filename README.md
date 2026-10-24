@@ -1,46 +1,23 @@
-# Bigasan POS
+# MERQ POS UI/UX V2 — Bigasan Owner Edition
 
-A mobile-first Flutter POS starter for a rice retailer / bigasan store in a Philippine market.
+This version builds on the existing MERQ POS Flutter project and focuses on fast, practical workflows for Philippine rice retailers.
 
-## Features
-- Rice product catalog with varieties such as Regular Milled, Dinorado, Jasmine and Premium.
-- Sell by kilogram or sack.
-- Cart with quantity controls.
-- Quick cash tender buttons and automatic change calculation.
-- Low-stock warnings.
-- Inventory restocking and stock deduction.
-- Stock cost per kg and estimated inventory value.
-- Daily sales dashboard and simple sales report.
-- Transaction history.
-- Receipt preview after checkout.
-- Local persistence using SharedPreferences.
-- Offline-first local data structure, so the prototype can continue working without internet.
+## Included in this version
 
-## Merq patterns reused/adapted
-This project intentionally follows several patterns from the supplied Merq `lib.zip`:
-- Product catalog + category filtering.
-- Cart state separated from UI.
-- Checkout modal with cash/change calculation.
-- Product stock + low-stock threshold.
-- Inventory movement concept.
-- Transaction history.
-- Sales report with revenue/items/transactions.
-- Receipt preview.
-- Search/filtering.
-- Dark/light-friendly Material UI structure.
+1. Faster selling quantities with quick 1 / 2 / 5 / 10 / 25 kg buttons.
+2. Cash, GCash, and Utang payment methods.
+3. Customer balance / utang tracking with payment recording.
+4. Supplier and restock history, including cost per kilogram.
+5. Estimated daily profit in the Sales screen.
+6. Low-stock dashboard.
+7. Shareable text receipts using the device share sheet.
+8. Inventory value and business summary cards.
+9. Existing QR ordering functionality was intentionally left untouched.
+10. More Filipino/Taglish-friendly wording such as Utang, Bayad, Stock, and GCash.
 
-## Bigasan-specific decisions
-- Rice is represented in kilograms for the simplest POS workflow.
-- A sack can be sold using a configurable "kg per sack" value.
-- Selling a sack deducts the equivalent kilogram stock.
-- Example: a 50 kg sack sale deducts 50 kg from inventory.
-- Stock is stored locally for this starter; Supabase/backend can be added later.
+## Notes
 
-## Run
-1. Install Flutter.
-2. Extract this ZIP.
-3. Run:
-   flutter pub get
-   flutter run
-
-The starter intentionally avoids Supabase so you can immediately test the UI and business flow.
+- Existing saved sales remain readable. Older sales default to Cash when no payment method was stored.
+- Customer and restock data are stored locally using SharedPreferences.
+- Receipt sharing uses `share_plus`.
+- The project was not built in this environment because Flutter/Dart CLI is not installed here. Run `flutter pub get` and `flutter analyze` / `flutter run` in your Flutter development environment before releasing.
